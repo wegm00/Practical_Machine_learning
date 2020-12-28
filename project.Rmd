@@ -2,7 +2,11 @@
 title: "Practical Machine Learning Final Project"
 author: "Werner Garcia"
 date: "27/12/2020"
-output: html_document
+output: 
+  html_document: 
+    toc: yes
+    keep_md: yes
+
 ---
 
 ```{r setup, include=FALSE}
