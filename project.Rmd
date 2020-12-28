@@ -1,0 +1,155 @@
+---
+title: "Practical Machine Learning Final Project"
+author: "Werner Garcia"
+date: "27/12/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(RColorBrewer)
+library(rattle)
+library(randomForest)
+library(gbm)
+
+```
+
+## Overview
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+
+## Loading and preprocessing the data
+
+```{r, echo= TRUE}
+rfilename <- "pml-training.csv"
+
+
+# Checking if folder exists
+if (!file.exists(rfilename)) { 
+  fileURL <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+  download.file(fileURL, rfilename)
+  rfilename <- "pml-testing.csv"
+  fileURL <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+  download.file(fileURL, rfilename)
+}
+
+trainingraw <- read.csv(file="pml-training.csv", header=TRUE)
+testingraw <- read.csv(file="pml-testing.csv", header=TRUE)
+
+# now we set Classe column as a factor variable
+trainingraw$classe <- as.factor(trainingraw$classe)
+
+# Now we remove the columns with missing values and the first 7 columns which
+# no have a significant value
+
+
+trainData<- trainingraw[, colSums(is.na(trainingraw)) == 0]
+testingData <- testingraw[, colSums(is.na(testingraw)) == 0]
+trainData <- trainData[, -c(1:7)]
+testingData <- testingData[, -c(1:7)]
+
+#Now we check the new size of our data
+dim(trainData)
+
+```
+
+### Preparing Data for prediction
+```{r, echo=TRUE}
+set.seed(202012) 
+inTrain <- createDataPartition(trainData$classe, p = 0.7, list = FALSE)
+testData <- trainData[-inTrain, ]
+trainData <- trainData[inTrain, ]
+#Now we check the new size of our data
+dim(trainData)
+
+```
+
+### removing the variables that are near-zero-variance
+```{r, echo=TRUE}
+NZV <- nearZeroVar(trainData)
+trainData <- trainData[, -NZV]
+testData  <- testData[, -NZV]
+#Now we check the final size of our data
+dim(trainData)
+
+```
+Finally we have reduce our number of variables from 160 to 53
+
+## Prediction Model Building
+
+Three methods will be applied to model the regressions  and the best one with higher accuracy when applied to the Test dataset, will be used for the quiz predictions. The methods are: Generalized Boosted Model, Random Forests and Decision Tree.
+A Confusion Matrix is plotted at the end of each analysis to better visualize the accuracy of the models.
+
+### First model to use: Generalized Boosted Model
+```{r, echo=TRUE}
+set.seed(202012)
+controlGBM <- trainControl(method = "repeatedcv", number = 5, repeats = 1)
+modFitGBM  <- train(classe ~ ., data=trainData, method = "gbm",
+                    trControl = controlGBM, verbose = FALSE)
+modFitGBM$finalModel
+print(modFitGBM)
+
+
+# Validate the GBM model
+predictGBM <- predict(modFitGBM, newdata=testData)
+cmGBM <- confusionMatrix(predictGBM, testData$classe)
+cmGBM
+
+plot(cmGBM$table, col = cmGBM$byClass, 
+     main = paste("GBM - Accuracy =", round(cmGBM$overall['Accuracy'], 4)))
+
+```
+
+
+### second model to use: Random Forests
+```{r, echo=TRUE}
+set.seed(202012)
+controlRF <- trainControl(method="cv", number=3, verboseIter=FALSE)
+modFitRandForest <- train(classe ~ ., data=trainData, method="rf",
+                          trControl=controlRF)
+modFitRandForest$finalModel
+
+predictRandForest <- predict(modFitRandForest, newdata=testData)
+confMatRandForest <- confusionMatrix(predictRandForest, testData$classe)
+confMatRandForest
+
+plot(confMatRandForest$table, col = confMatRandForest$byClass, 
+     main = paste("Random Forest - Accuracy =", round(confMatRandForest$overall['Accuracy'], 4)))
+```
+
+
+### Last model to use: Decision Trees
+```{r, echo=TRUE}
+set.seed(202012)
+decisionTreeMod1 <- rpart(classe ~ ., data=trainData, method="class")
+fancyRpartPlot(decisionTreeMod1, sub = "Rattle 2020-12-27 23:41:00 WernerGarcia")
+
+predictTreeMod1 <- predict(decisionTreeMod1, testData, type = "class")
+cmtree <- confusionMatrix(predictTreeMod1, testData$classe)
+cmtree
+
+plot(cmtree$table, col = cmtree$byClass, 
+     main = paste("Decision Tree - Accuracy =", round(cmtree$overall['Accuracy'], 4)))
+
+
+```
+
+## Applying the Best Model to the Test Data
+
+The accuracy of the 3 regression modeling methods above are:
+
+    Random Forest : 0.9959
+    Decision Tree : 0.7611
+    GBM : 0.9679
+
+In that case, the Random Forest model will be applied to predict the 20 quiz results as now we show.
+
+```{r, echo=TRUE}
+finalpredict <- predict(modFitRandForest, newdata=testingData)
+finalpredict
+
+```
